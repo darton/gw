@@ -1,3 +1,9 @@
 table inet filter {
-
+ chain input {
+        type filter hook input priority 0; policy drop;
+        ct state established,related counter accept
+        iifname "lo" accept
+        iifname "$LAN" ip saddr @allowed_ssh_lan tcp dport 22 accept
+        iifname "$WAN" ip saddr @allowed_ssh_wan tcp dport 22 accept
+    }
 }
