@@ -5,5 +5,6 @@ table inet filter {
         iifname "lo" accept
         iifname "$LAN" ip saddr @allowed_ssh_lan tcp dport 22 accept
         iifname "$WAN" ip saddr @allowed_ssh_wan tcp dport 22 accept
+        iifname "$MGMT" tcp dport 22 accept
     }
 }
