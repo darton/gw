@@ -1,0 +1,7 @@
+flush ruleset
+
+include "/etc/nftables/defines.nft"
+include "/etc/nftables/sets.nft"
+include "/etc/nftables/input.nft"
+include "/etc/nftables/forward.nft"
+include "/etc/nftables/output.nft"
