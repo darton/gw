@@ -1,3 +1,11 @@
 table inet filter {
+    chain forward {
+        type filter hook forward priority 0; policy drop;
 
+        ct state established, related accept
+        ct state new oifname "$LAN" tcp flags & (fin | syn | rst | ack) == syn log prefix "[nftables] FWD New SYN: " group 1
+        ip saddr @fw_ip iifname "$LAN" oifname "$WAN" accept
+        ip daddr @fw_ip iifname "$WAN" oifname "$LAN" accept
+
+    }
 }
