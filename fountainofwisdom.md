@@ -10,3 +10,4 @@ https://nucco.org/2020/05/nftables-router-howto.html
 
 https://blog.rymcg.tech/blog/proxmox/06-router/
 
+https://github.com/home-router/nftables
