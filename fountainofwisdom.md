@@ -6,3 +6,4 @@ https://www.monotux.tech/posts/2021/04/nftables-primer/
 
 https://hackers-arise.com/linux-basics-for-hackers-building-a-router-with-nftables/
 https://oxcrag.net/projects/vlans-with-linux-nftables-and-ubiquiti-unifi/
+https://nucco.org/2020/05/nftables-router-howto.html
