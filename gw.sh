@@ -15,8 +15,8 @@
 PATH=/sbin:/usr/sbin/:/bin:/usr/bin:$PATH
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 SCRIPT_NAME="$(basename "$0")"
-FW_CONF_PATH="${SCRIPT_DIR}/fw.conf"
-FW_FUNCTIONS_PATH="$SCRIPT_DIR/fwfunctions"
+GW_CONF_PATH="${SCRIPT_DIR}/gw.conf"
+GW_FUNCTIONS_PATH="$SCRIPT_DIR/gwfunctions.sh"
 current_time=$(date +"%F %T.%3N%:z")
 
 MESSAGE="Program must be run as root"
@@ -26,12 +26,12 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-FW_CONFIG_TEMP_DIR=$(mktemp -d -p /dev/shm/ FW_CONFIG.XXXX)
-trap 'rm -rf ${FW_CONFIG_TEMP_DIR}' INT TERM EXIT
+FW_CONFIG_TEMP_DIR=$(mktemp -d -p /dev/shm/ GW_CONFIG.XXXX)
+trap 'rm -rf ${GW_CONFIG_TEMP_DIR}' INT TERM EXIT
 
 #Load fw.sh config file
-MESSAGE="Can not load fw.conf"
-if ! source "${FW_CONF_PATH}"; then
+MESSAGE="Can not load gw.conf"
+if ! source "${GW_CONF_PATH}"; then
     logger -p error -t "${SCRIPT_NAME}" "${MESSAGE}"
     echo "$MESSAGE"
     exit 1
@@ -43,7 +43,7 @@ if [ "$DEBUG" == "no" ]; then
 fi
 
 #Load fwfunction
-MESSAGE="Can not load fwfunctions"
+MESSAGE="Can not load gwfunctions.sh"
 if ! source "${FW_FUNCTIONS_PATH}"; then
     logger -p error -t "${SCRIPT_NAME}" "${MESSAGE}"
     echo "${MESSAGE}"
@@ -53,8 +53,8 @@ fi
 
 ####Makes necessary directories and files####
 [[ -f "$logdir"/"$logfile" ]] || touch "$logdir"/"$logfile"
-[[ -d /run/fw-sh/ ]] || mkdir /run/fw-sh
-[[ -f /run/fw-sh/maintenance.pid ]] || echo 0 > /run/fw-sh/maintenance.pid
+[[ -d /run/gw-sh/ ]] || mkdir /run/gw-sh
+[[ -f /run/gw-sh/maintenance.pid ]] || echo 0 > /run/gw-sh/maintenance.pid
 [[ -d "$confdir" ]] || mkdir -p "$confdir"
 [[ -d "$oldconfdir" ]] || mkdir -p "$oldconfdir"
 
@@ -71,19 +71,19 @@ done
 
 
 stop (){
-    Log "info" "Trying Firewall Stopping"
+    Log "info" "Trying Gateway Stopping"
     fw_cron stop
     dhcpd_cmd stop
     shaper_cmd stop
     static_routing_down
     firewall_down
     destroy_all_hashtables
-    Log "info" "Firewall Stoped successfully"
+    Log "info" "Gateway Stoped successfully"
 }
 
 start (){
     #tuned-adm profile network-latency
-    Log "info" "Trying Firewall Starting"
+    Log "info" "Trying Gateway Starting"
     stop > /dev/null 2>&1
     static_routing_up
     create_fw_hashtables
@@ -92,17 +92,17 @@ start (){
     shaper_cmd start
     dhcpd_cmd start
     fw_cron start
-    Log "info" "Firewall Started successfully"
+    Log "info" "gateway Started successfully"
 }
 
 newreload (){
-    Log "info" "Firewall reloading"
+    Log "info" "Gateway reloading"
     load_fw_hashtables
     modify_nat11_fw_rules
     modify_nat1n_fw_rules
     shaper_cmd restart
     dhcpd_cmd restart
-    Log "info" "Firewall reloaded successfully"
+    Log "info" "Gateway reloaded successfully"
 }
 
 lmsd (){
@@ -117,14 +117,14 @@ lmsd (){
 }
 
 maintenance-on (){
-    Log "info" "Trying Firewall maintenance on"
+    Log "info" "Trying Gateway maintenance on"
     mpid=$(cat /run/fw-sh/maintenance.pid)
     if [ "$mpid" = 1 ]; then
-        Log "info" "Firewall maintenance is allready on"
-        Log "info" "To exit from maintenance mode run: fw.sh maintenance-off"
+        Log "info" "Gateway maintenance is allready on"
+        Log "info" "To exit from maintenance mode run: gw.sh maintenance-off"
         exit
     else
-        ip link set dev "$MGMT" up && { echo 1 > /run/fw-sh/maintenance.pid; Log "info" "Firewall maintenance is on"; } || { Log "error" "Can not set device "$MGMT" up"; exit 1; }
+        ip link set dev "$MGMT" up && { echo 1 > /run/gw-sh/maintenance.pid; Log "info" "Gateway maintenance is on"; } || { Log "error" "Can not set device "$MGMT" up"; exit 1; }
         #stop
         #ip link set dev "$LAN" down
         #ip link set dev "$WAN" down
@@ -133,17 +133,17 @@ maintenance-on (){
 }
 
 maintenance-off (){
-    Log "info" "Trying Firewall maintenance off"
+    Log "info" "Trying Gateway maintenance off"
     mpid=$(cat /run/fw-sh/maintenance.pid)
     if [ "$mpid" = 0 ]; then
-        Log "info" "Firewall maintenance is allready off"
+        Log "info" "Gateway maintenance is allready off"
         exit
     else
         #ip link set dev "$WAN" up || { Log "error" "Can not set device $WAN up"; exit 1; }
         #ip link set dev "$LAN" up || { Log "error" "Can not set device $LAN up"; exit 1; }
         sleep 5
         #start
-        ip link set dev "$MGMT" down && { echo 0 > /run/fw-sh/maintenance.pid; Log "info" "Firewall maintenance is off"; } || { Log "error" "Can not set device "$MGMT" down"; }
+        ip link set dev "$MGMT" down && { echo 0 > /run/gw-sh/maintenance.pid; Log "info" "Gateway maintenance is off"; } || { Log "error" "Can not set device "$MGMT" down"; }
     fi
 }
 
@@ -177,9 +177,9 @@ case "$1" in
     'shaper_start')
         shaper_cmd start
     ;;
-    'shaper_restart')
+    'shaper_reload')
         get_shaper_config
-        shaper_cmd restart
+        shaper_reload
     ;;
     'shaper_stats')
         shaper_cmd stats
@@ -195,6 +195,6 @@ case "$1" in
     ;;
     *)
        Log "info" "Script running without parameter"
-       echo -e "\nUsage: fw.sh start|stop|restart|reload|status|lmsd|shaper_stop|shaper_start|shaper_restart|shaper_stats|shaper_status|maintenance-on|maintenance-off"
+       echo -e "\nUsage: gw.sh start|stop|restart|reload|status|lmsd|shaper_stop|shaper_start|shaper_restart|shaper_stats|shaper_status|maintenance-on|maintenance-off"
     ;;
 esac
