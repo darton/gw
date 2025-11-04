@@ -91,7 +91,7 @@ function get_shaper_config {
     Log info "Get shaper config OK"
 }
 
-function lmsd_reload {
+function lmsd_reload_all {
     echo "Reloading all lmsd instances on the remote machine"
     $exec_cmd "$lmsd -q -h $lms_dbhost:3306 -H $lmsd_host -u $lms_dbuser -p $lms_dbpwd -d $lms_db" || { Log error "Can not connect to database"; exit 1; }
     Log info "Waiting 10s for lmsd to create new configuration files"
@@ -143,7 +143,7 @@ function shaper_cmd {
         if check_interfaces_up "$WAN"; then
             tc qdisc del dev $WAN root 2> /dev/null
         fi
-
+ 
     elif [ "$1" = "start" ]; then
         shaper_cmd stop
         if ! check_interfaces_up "$WAN" "$LAN"; then
@@ -249,9 +249,9 @@ function shaper_cmd {
                 ceil=$((ceil * 1000))
                 CUSTOMER_DOWN_CBURST=$(echo "$ceil * 0.0125" | bc -l)
                 if ! check_interfaces_up "$LAN"; then
-                    Log "error" "Interface $LAN check failed: skipping traffic shaping configuration."
+            	    Log "error" "Interface $LAN check failed: skipping traffic shaping configuration."
                     return 1
-                fi
+            	fi
                 tc class add dev $LAN parent 1:2 classid 1:$h htb rate $arg2 ceil $arg3 burst ${CUSTOMER_DOWN_BURST}b cburst ${CUSTOMER_DOWN_CBURST}b prio $LAN_HOSTS_PRIORITY quantum 1514
                 tc qdisc add dev $LAN parent 1:$h fq_codel memory_limit 4Mb
 
@@ -291,26 +291,38 @@ function shaper_cmd {
                 tc $TC_OPTIONS show dev $WAN
             fi
         done
+    elif [ "$1" = "stats" ]; then
+        python3 ip_accounting.py
     fi
 
 }
 
 function shaper_reload {
-        compare_files_sha1 "$confdir/$shaper_file" "$oldconfdir/$shaper_file"
-        case $? in
-                0) Log info "The Shaper configuration is identical, a reload is not needed" ;;
-                1) Log info "The Shaper has a new configuration, reloading Shaper"; shaper_cmd stop; shaper_cmd start ;;
-                2) Log error "The Shaper files not exist" ;;
-        esac
+	compare_files_sha1 "$confdir/$shaper_file" "$oldconfdir/$shaper_file"
+	case $? in
+		0)
+                  Log info "The Shaper configuration is identical, a reload is not needed" 
+                  ;;
+		1)
+                   Log info "The Shaper has a new configuration, reloading Shaper"; 
+                   shaper_cmd stop
+                   shaper_cmd start
+                   accounting stop
+                   accounting start
+                   ;;
+		2)
+                   Log error "The Shaper files not exist"
+                   ;;
+	esac
 }
 
 function dhcpd_reload {
     compare_files_sha1 "$confdir"/"dhcpd.conf" "$oldconfdir"/"dhcpd.conf"
-        case $? in
-                0) Log info "The DHCP config file is identical, a reload is not needed" ;;
-                1) Log info "The dhcpd.conf file has a new configuration, reloading the DHCP server"; dhcp_server_cmd restart ;;
-                2) Log error "The DHCP config files not exist" ;;
-        esac
+	case $? in
+		0) Log info "The DHCP config file is identical, a reload is not needed" ;;
+		1) Log info "The dhcpd.conf file has a new configuration, reloading the DHCP server"; dhcp_server_cmd restart ;;
+		2) Log error "The DHCP config files not exist" ;;
+	esac
 }
 
 function gw_cron {
@@ -319,7 +331,7 @@ function gw_cron {
 SHELL=/bin/bash
 PATH=/sbin:/bin:/usr/sbin:/usr/bin
 MAILTO=""
-* * * * * root $scriptsdir/gw.sh lmsd  > /dev/null 2>&1
+* * * * * root $scriptsdir/gw.sh reload_new_config  > /dev/null 2>&1
 00 22 * * * root $scriptsdir/gw.sh shaper_reload  > /dev/null 2>&1
 00 10 * * * root $scriptsdir/gw.sh shaper_reload  > /dev/null 2>&1
 " > /etc/cron.d/gw_sh
@@ -369,12 +381,12 @@ function accounting {
                 fi
             done < "$confdir/$shaper_file"
 
-            Log info "nftables accounting chains and rules loaded"
+            echo "$(date) - nftables accounting chains and rules loaded"
             ;;
         stop)
             nft flush table ip mangle 2>/dev/null
             nft delete table ip mangle 2>/dev/null
-            Log info "nftables accounting rules removed"
+            echo "$(date) - nftables accounting rules removed"
             ;;
         *)
             echo "Usage: accounting {start|stop}"

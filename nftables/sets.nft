@@ -1,5 +1,5 @@
 table inet filter {
-set allowed_ssh_wan {
+    set allowed_ssh_wan {
         type ipv4_addr
     }
 

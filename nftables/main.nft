@@ -1,7 +1,0 @@
-flush ruleset
-
-include "/opt/gw/nftables/defines.nft"
-include "/opt/gw/nftables/sets.nft"
-include "/opt/gw/nftables/input.nft"
-include "/opt/gw/nftables/forward.nft"
-include "/opt/gw/nftables/output.nft"

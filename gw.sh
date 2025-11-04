@@ -68,11 +68,12 @@ done
 
 stop (){
     Log "info" "Trying Gateway Stopping"
-    fw_cron stop
+    gw_cron stop
     dhcpd_cmd stop
     accounting stop
     shaper_cmd stop
-    static_routing_down
+    #static_routing_down
+    #firewall stop
     Log "info" "Gateway Stoped successfully"
 }
 
@@ -80,35 +81,31 @@ start (){
     #tuned-adm profile network-latency
     Log "info" "Trying Gateway Starting"
     stop > /dev/null 2>&1
+    #firewall start
     #static_routing_up
     shaper_cmd start
     accounting start
     dhcpd_cmd start
-    fw_cron start
+    gw_cron start
     Log "info" "gateway Started successfully"
 }
 
 newreload (){
     Log "info" "Gateway reloading"
-    get_config
-    #load_fw_hashtables
-    #modify_nat11_fw_rules
-    #modify_nat1n_fw_rules
+    #firewall_reload
     shaper_reload
-    accounting stop
-    accounting start
     dhcpd_reload
     Log "info" "Gateway reloaded successfully"
 }
 
-lmsd_status (){
+reload_new_config (){
     dburl="mysql -s -u $lms_dbuser -p $lms_dbpwd $lms_db -e \"select reload from hosts where id=4\""
     lmsd_status=$($exec_cmd $dburl| grep -v reload)
     lmsd_status=1
     if [ "$lmsd_status" = 1 ]; then
         Log "info" "Host reload status is set"
-        lmsd_reload
-        #get_config
+        lmsd_reload_all
+        get_config
         newreload
     fi
 }
@@ -165,8 +162,8 @@ case "$1" in
     'reload')
         newreload
     ;;
-    'lmsd')
-        lmsd_status
+    'reload_new_config')
+        reload_new_config
     ;;
     'shaper_stop')
         shaper_cmd stop
@@ -192,6 +189,6 @@ case "$1" in
     ;;
     *)
        Log "info" "Script running without parameter"
-       echo -e "\nUsage: gw.sh start|stop|restart|reload|status|lmsd|shaper_stop|shaper_start|shaper_restart|shaper_stats|shaper_status|maintenance-on|maintenance-off"
+       echo -e "\nUsage: gw.sh start|stop|restart|reload|reload_new_config|status|lmsd|shaper_stop|shaper_start|shaper_reload|shaper_stats|shaper_status|maintenance-on|maintenance-off"
     ;;
 esac
