@@ -70,10 +70,9 @@ stop (){
     Log "info" "Trying Gateway Stopping"
     gw_cron stop
     dhcpd_cmd stop
-    accounting stop
     shaper_cmd stop
     #static_routing_down
-    #firewall stop
+    nft -f /opt/gw/scripts/disabled_nftables.conf #firewall stop
     Log "info" "Gateway Stoped successfully"
 }
 
@@ -81,7 +80,7 @@ start (){
     #tuned-adm profile network-latency
     Log "info" "Trying Gateway Starting"
     stop > /dev/null 2>&1
-    #firewall start
+    nft -f /opt/gw/scripts/enabled_nftables.conf #firewall start
     #static_routing_up
     shaper_cmd start
     accounting start
