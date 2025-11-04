@@ -1,2 +1,4 @@
 # gw
-The gateway nft based.
+--- Under development ---
+The gateway nft based, not ready yet. 
+
