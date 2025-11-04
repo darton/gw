@@ -369,12 +369,12 @@ function accounting {
                 fi
             done < "$confdir/$shaper_file"
 
-            echo "$(date) - nftables accounting chains and rules loaded"
+            Log info "nftables accounting chains and rules loaded"
             ;;
         stop)
             nft flush table ip mangle 2>/dev/null
             nft delete table ip mangle 2>/dev/null
-            echo "$(date) - nftables accounting rules removed"
+            Log info "nftables accounting rules removed"
             ;;
         *)
             echo "Usage: accounting {start|stop}"
