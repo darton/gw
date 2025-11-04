@@ -22,6 +22,16 @@ function Log {
     fi
 }
 
+required_commands() {
+  for cmd; do
+    command -v "$cmd" >/dev/null 2>&1 || {
+      echo "Missing required command: $cmd" >&2
+      echo "You can install it using: sudo apt|dnf install $cmd"  >&2
+      return 1
+    }
+  done
+}
+
 check_interfaces_up() {
     for iface in "$@"; do
         if [[ ! -e "/sys/class/net/$iface/operstate" ]]; then
@@ -72,7 +82,7 @@ function get_config {
 
 function get_shaper_config {
     echo "The LMS generates a configuration for the Shaper"
-    $exec_cmd "timeout 10 $lmsd -q -i $lmsd_shaper_instance -h $lms_dbhost:3306 -H $lmsd_host -u $lms_dbuser -d $lms_db" || { Log error "Can not connect to database"; exit 1; }
+    $exec_cmd "timeout 10 $lmsd -q -i $lmsd_shaper_instance -h $lms_dbhost:3306 -H $lmsd_host -u $lms_dbuser -p $lms_dbpwd -d $lms_db" || { Log error "Can not connect to database"; exit 1; }
     echo "Waiting a few seconds"
     sleep 5
     mv $confdir/$shaper_file $oldconfdir/$shaper_file
@@ -83,7 +93,7 @@ function get_shaper_config {
 
 function lmsd_reload {
     echo "Reloading all lmsd instances on the remote machine"
-    $exec_cmd "$lmsd -q -h $lms_dbhost:3306 -H $lmsd_host -u $lms_dbuser -d $lms_db" || { Log error "Can not connect to database"; exit 1; }
+    $exec_cmd "$lmsd -q -h $lms_dbhost:3306 -H $lmsd_host -u $lms_dbuser -p $lms_dbpwd -d $lms_db" || { Log error "Can not connect to database"; exit 1; }
     Log info "Waiting 10s for lmsd to create new configuration files"
     sleep 10
 }
@@ -121,7 +131,7 @@ function dhcpd_cmd {
     if [ "$arg" = "start" ]; then
         dhcp_server_cmd start && Log info "The dhcpd server successfully started OK"
     elif [ "$arg" = "stop" ]; then
-        dhcp_server_cmd stop && Log info "$current_time - The dhcpd server successfully stopped OK"
+        dhcp_server_cmd stop && Log info "The dhcpd server successfully stopped OK"
     fi
 }
 
@@ -133,7 +143,7 @@ function shaper_cmd {
         if check_interfaces_up "$WAN"; then
             tc qdisc del dev $WAN root 2> /dev/null
         fi
-        
+
     elif [ "$1" = "start" ]; then
         shaper_cmd stop
         if ! check_interfaces_up "$WAN" "$LAN"; then
@@ -186,7 +196,7 @@ function shaper_cmd {
         else
             BURST="burst $BURST"
         fi
-		
+
         #To WAN
         # Set limit for all traffic from WAN to Internet
         tc qdisc add dev $WAN root handle 2:0 htb default 3 r2q 1
@@ -239,16 +249,12 @@ function shaper_cmd {
                 ceil=$((ceil * 1000))
                 CUSTOMER_DOWN_CBURST=$(echo "$ceil * 0.0125" | bc -l)
                 if ! check_interfaces_up "$LAN"; then
-            	    Log "error" "Interface $LAN check failed: skipping traffic shaping configuration."
+                    Log "error" "Interface $LAN check failed: skipping traffic shaping configuration."
                     return 1
-            	fi
+                fi
                 tc class add dev $LAN parent 1:2 classid 1:$h htb rate $arg2 ceil $arg3 burst ${CUSTOMER_DOWN_BURST}b cburst ${CUSTOMER_DOWN_CBURST}b prio $LAN_HOSTS_PRIORITY quantum 1514
                 tc qdisc add dev $LAN parent 1:$h fq_codel memory_limit 4Mb
 
-            elif [ "$arg1" = "filter" ]; then
-                echo $arg2 | { IFS='.' read -r octet1 octet2 octet3 octet4;
-                iptables -t mangle -A COUNTERSOUT$octet1.$octet2.$octet3 -s $arg2 -j CLASSIFY --set-class 2:$h;
-                iptables -t mangle -A COUNTERSIN$octet1.$octet2.$octet3 -d $arg2 -j CLASSIFY --set-class 1:$h; }
             fi
         done < <(grep -v \# $confdir/$shaper_file)
 
@@ -260,27 +266,53 @@ function shaper_cmd {
         #Set default limit for traffic from Internet to LAN
         tc class add dev $LAN parent 1:1 classid 1:3 htb rate $LAN_UNCLASSIFIED_RATE_LIMIT ceil $LAN_UNCLASSIFIED_CEIL_LIMIT prio $LAN_UNCLASSIFIED_PRIORITY quantum 1514
         tc qdisc add dev $LAN parent 1:3 fq_codel memory_limit 1Mb
-	fi
+
+    elif [ "$1" = "status" ]; then
+        echo
+        echo "$LAN interface"
+        echo "----------------"
+        for TC_OPTIONS in qdisc class filter; do
+            if [ ! -z "$LAN" ]; then
+                echo
+                echo "$TC_OPTIONS"
+                echo "------"
+                tc $TC_OPTIONS show dev $LAN
+            fi
+        done
+
+        echo
+        echo "$WAN interface"
+        echo "----------------"
+        for TC_OPTIONS in qdisc class filter; do
+            if [ ! -z "$WAN" ]; then
+                echo
+                echo "$TC_OPTIONS"
+                echo "------"
+                tc $TC_OPTIONS show dev $WAN
+            fi
+        done
+    fi
+
 }
 
 function shaper_reload {
-	compare_files_sha1 "$confdir/$shaper_file" "$oldconfdir/$shaper_file"
-	case $? in
-		0) Log info "The Shaper configuration is identical, a reload is not needed" ;;
-		1) Log info "The Shaper has a new configuration, reloading Shaper"; shaper_cmd stop; shaper_cmd start ;;
-		2) Log error "The Shaper files not exist" ;;
-	esac
+        compare_files_sha1 "$confdir/$shaper_file" "$oldconfdir/$shaper_file"
+        case $? in
+                0) Log info "The Shaper configuration is identical, a reload is not needed" ;;
+                1) Log info "The Shaper has a new configuration, reloading Shaper"; shaper_cmd stop; shaper_cmd start ;;
+                2) Log error "The Shaper files not exist" ;;
+        esac
 }
 
 function dhcpd_reload {
     compare_files_sha1 "$confdir"/"dhcpd.conf" "$oldconfdir"/"dhcpd.conf"
-	case $? in
-		0) Log info "The DHCP config file is identical, a reload is not needed" ;;
-		1) Log info "The dhcpd.conf file has a new configuration, reloading the DHCP server"; dhcp_server_cmd restart ;;
-		2) Log error "The DHCP config files not exist" ;;
-	esac
+        case $? in
+                0) Log info "The DHCP config file is identical, a reload is not needed" ;;
+                1) Log info "The dhcpd.conf file has a new configuration, reloading the DHCP server"; dhcp_server_cmd restart ;;
+                2) Log error "The DHCP config files not exist" ;;
+        esac
 }
-            
+
 function gw_cron {
     if [ "$1" = "start" ]; then
         echo "# Run the gw.sh cron jobs
@@ -299,4 +331,54 @@ MAILTO=""
         fi
         Log info "Disabling cron for gw.sh"
     fi
+}
+
+function accounting {
+    case "$1" in
+        start)
+            nft flush table ip mangle 2>/dev/null
+            nft delete table ip mangle 2>/dev/null
+            nft add table ip mangle
+
+            nft add chain ip mangle FORWARD { type filter hook forward priority -150 \; }
+
+            # Create per-subnet chains and jump rules
+            network_list=$(awk '/filter / {split($2, ip, "."); print ip[1]"."ip[2]"."ip[3]}' "$confdir/$shaper_file" | sort -u)
+
+            for net in $network_list; do
+                chain_in="COUNTERSIN_${net//./_}"
+                chain_out="COUNTERSOUT_${net//./_}"
+
+                nft add chain ip mangle $chain_in
+                nft add chain ip mangle $chain_out
+
+                nft add rule ip mangle FORWARD iifname "$WAN" ip daddr "$net.0/24" jump $chain_in
+                nft add rule ip mangle FORWARD oifname "$WAN" ip saddr "$net.0/24" jump $chain_out
+            done
+
+            # Populate per-subnet chains with host-specific rules
+            h=99
+            while read arg1 arg2 arg3 arg4; do
+                if [ "$arg1" = "filter" ]; then
+                    IFS='.' read -r o1 o2 o3 o4 <<< "$arg2"
+                    chain_in="COUNTERSIN_${o1}_${o2}_${o3}"
+                    chain_out="COUNTERSOUT_${o1}_${o2}_${o3}"
+
+                    nft add rule ip mangle $chain_out ip saddr "$arg2" meta mark set $((0x200 + h)) counter
+                    nft add rule ip mangle $chain_in ip daddr "$arg2" meta mark set $((0x100 + h)) counter
+                fi
+            done < "$confdir/$shaper_file"
+
+            echo "$(date) - nftables accounting chains and rules loaded"
+            ;;
+        stop)
+            nft flush table ip mangle 2>/dev/null
+            nft delete table ip mangle 2>/dev/null
+            echo "$(date) - nftables accounting rules removed"
+            ;;
+        *)
+            echo "Usage: accounting {start|stop}"
+            return 1
+            ;;
+    esac
 }
