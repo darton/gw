@@ -17,7 +17,7 @@ SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 SCRIPT_NAME="$(basename "$0")"
 GW_CONF_PATH="${SCRIPT_DIR}/gw.conf"
 GW_FUNCTIONS_PATH="$SCRIPT_DIR/gwfunctions.sh"
-current_time=$(date +"%F %T.%3N%:z")
+
 
 MESSAGE="Program must be run as root"
 if [[ $EUID -ne 0 ]]; then
@@ -26,7 +26,7 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-FW_CONFIG_TEMP_DIR=$(mktemp -d -p /dev/shm/ GW_CONFIG.XXXX)
+GW_CONFIG_TEMP_DIR=$(mktemp -d -p /dev/shm/ GW_CONFIG.XXXX)
 trap 'rm -rf ${GW_CONFIG_TEMP_DIR}' INT TERM EXIT
 
 #Load fw.sh config file
@@ -37,19 +37,15 @@ if ! source "${GW_CONF_PATH}"; then
     exit 1
 fi
 
-if [ "$DEBUG" == "no" ]; then
-    logdir="/dev"
-    logfile="null"
-fi
-
 #Load fwfunction
 MESSAGE="Can not load gwfunctions.sh"
-if ! source "${FW_FUNCTIONS_PATH}"; then
+if ! source "${GW_FUNCTIONS_PATH}"; then
     logger -p error -t "${SCRIPT_NAME}" "${MESSAGE}"
     echo "${MESSAGE}"
     exit 1
 fi
 
+required_commands awk bc cat grep ip nft tc timeout  || exit 1
 
 ####Makes necessary directories and files####
 [[ -f "$logdir"/"$logfile" ]] || touch "$logdir"/"$logfile"
@@ -74,10 +70,9 @@ stop (){
     Log "info" "Trying Gateway Stopping"
     fw_cron stop
     dhcpd_cmd stop
+    accounting stop
     shaper_cmd stop
     static_routing_down
-    firewall_down
-    destroy_all_hashtables
     Log "info" "Gateway Stoped successfully"
 }
 
@@ -85,11 +80,9 @@ start (){
     #tuned-adm profile network-latency
     Log "info" "Trying Gateway Starting"
     stop > /dev/null 2>&1
-    static_routing_up
-    create_fw_hashtables
-    load_fw_hashtables
-    firewall_up
+    #static_routing_up
     shaper_cmd start
+    accounting start
     dhcpd_cmd start
     fw_cron start
     Log "info" "gateway Started successfully"
@@ -97,21 +90,25 @@ start (){
 
 newreload (){
     Log "info" "Gateway reloading"
-    load_fw_hashtables
-    modify_nat11_fw_rules
-    modify_nat1n_fw_rules
-    shaper_cmd restart
-    dhcpd_cmd restart
+    get_config
+    #load_fw_hashtables
+    #modify_nat11_fw_rules
+    #modify_nat1n_fw_rules
+    shaper_reload
+    accounting stop
+    accounting start
+    dhcpd_reload
     Log "info" "Gateway reloaded successfully"
 }
 
-lmsd (){
-    dburl="mysql -s -u $lms_dbuser $lms_db -e \"select reload from hosts where id=4\""
+lmsd_status (){
+    dburl="mysql -s -u $lms_dbuser -p $lms_dbpwd $lms_db -e \"select reload from hosts where id=4\""
     lmsd_status=$($exec_cmd $dburl| grep -v reload)
+    lmsd_status=1
     if [ "$lmsd_status" = 1 ]; then
-        Log "info" "Host reload status has been set"
+        Log "info" "Host reload status is set"
         lmsd_reload
-        get_config
+        #get_config
         newreload
     fi
 }
@@ -169,7 +166,7 @@ case "$1" in
         newreload
     ;;
     'lmsd')
-        lmsd
+        lmsd_status
     ;;
     'shaper_stop')
         shaper_cmd stop
