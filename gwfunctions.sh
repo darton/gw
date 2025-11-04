@@ -66,6 +66,33 @@ compare_files_sha1() {
     [[ "$sum1" == "$sum2" ]] && return 0 || return 1
 }
 
+# Wrapper for systemctl that checks unit existence before executing an action
+function systemctl_cmd {
+    local action="$1"
+    local unit="$2"
+
+    # Validate input
+    if [[ -z "$action" || -z "$unit" ]]; then
+        Log error "Usage: systemctl_cmd <start|stop|restart|status|...> <unit>"
+        return 3
+    fi
+
+    # Check if the unit exists
+    if ! systemctl list-unit-files | grep -q "^${unit}"; then
+        Log warn "Systemd unit '${unit}' does not exist"
+        return 2
+    fi
+
+    # Execute the requested action
+    if systemctl "$action" "$unit"; then
+        Log info "systemctl ${action} ${unit} — OK"
+        return 0
+    else
+        Log error "systemctl ${action} ${unit} — FAILED"
+        return 1
+    fi
+}
+
 function get_config {
     Log info "Connecting to LMS and downloading configuration files"
     $copy_cmd_url/* ${GW_CONFIG_TEMP_DIR} || { Log error "Can not download config files"; exit 1; }
@@ -120,7 +147,7 @@ function dhcp_server_cmd {
     service="${dhcp_services[$distro_id]}"
 
     if [[ -n "$service" ]]; then
-        systemctl "$arg" "$service"
+        systemctl_cmd "$arg" "$service"
     else
         Log warn "Unknown Linux distro: $distro_id"
     fi
