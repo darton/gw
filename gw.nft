@@ -1,0 +1,84 @@
+# gw.nft - main configuration file (includes snat-host-groups.nft and snat-nets.nft)
+
+flush ruleset
+
+define WAN = "eth0"
+define LAN = "eth1"
+
+table ip gateway {
+
+    include "/opt/gw/scripts/snat-host-groups.nft"
+    include "/opt/gw/scripts/snat-nets.nft"
+
+    # Public IPs on LAN (forwarding only, no NAT)
+    set lan_public_ips {
+        type ipv4_addr;
+        # elements omitted when empty
+    }
+
+    chain prerouting {
+        type nat hook prerouting priority dstnat + 10;
+        policy accept;
+
+        # Anti-spoofing: drop private source IPs arriving from WAN
+        iifname $WAN ip saddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 } counter drop
+    }
+
+    chain postrouting {
+        type nat hook postrouting priority srcnat + 10;
+        policy accept;
+
+        # SNAT 1:n for host groups (sets grouped by public IP)
+        oifname $WAN iifname $LAN ip saddr @snat_hosts_203_0_113_5 snat to 203.0.113.5
+        oifname $WAN iifname $LAN ip saddr @snat_hosts_203_0_113_6 snat to 203.0.113.6
+
+        # SNAT 1:n for subnets (sets from snat-nets.nft)
+        oifname $WAN iifname $LAN ip saddr @snat_net_203_0_113_5 snat to 203.0.113.5
+        oifname $WAN iifname $LAN ip saddr @snat_net_203_0_113_6 snat to 203.0.113.6
+    }
+
+    chain forward {
+        type filter hook forward priority 0;
+        policy drop;
+
+        ct state invalid counter drop
+        ct state established,related counter accept
+
+        iifname $LAN jump sanity_lan
+
+        # Forwarding for hosts and subnets (outgoing traffic)
+        iifname $LAN oifname $WAN ip saddr @snat_hosts_203_0_113_5 counter accept
+        iifname $LAN oifname $WAN ip saddr @snat_hosts_203_0_113_6 counter accept
+        iifname $LAN oifname $WAN ip saddr @snat_net_203_0_113_5 counter accept
+        iifname $LAN oifname $WAN ip saddr @snat_net_203_0_113_6 counter accept
+
+        # Public IPs on LAN: forwarding without NAT
+        iifname $LAN oifname $WAN ip saddr @lan_public_ips counter accept
+        iifname $WAN oifname $LAN ip daddr @lan_public_ips counter accept
+
+        limit rate 10/second log prefix "FORWARD DROP: " group 0
+    }
+
+    chain input {
+        type filter hook input priority 0;
+        policy drop;
+
+        ct state invalid counter drop
+        ct state established,related counter accept
+
+        ip protocol icmp counter accept
+
+        ip saddr 192.0.2.0/24 tcp dport 22 counter accept
+
+        limit rate 5/second log prefix "INPUT DROP: " group 0
+    }
+
+    chain output {
+        type filter hook output priority 0;
+        policy accept;
+    }
+
+    chain sanity_lan {
+        ip saddr != { 192.168.0.0/16, 10.0.0.0/8 } counter drop
+    }
+}
