@@ -1,0 +1,7 @@
+grantedhost 192.168.96.9
+grantedhost 192.168.96.62
+deniedhost 192.168.97.11
+grantedhost 192.168.97.37
+deniedhost 192.168.97.68
+deniedhost 192.168.97.99
+grantedhost 192.168.97.108
