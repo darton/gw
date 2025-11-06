@@ -1,0 +1,5 @@
+
+    set allowed_ssh_wan {
+        type ipv4_addr;
+    }
+

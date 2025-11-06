@@ -1,0 +1,78 @@
+# gw.nft - main configuration file (includes SNAT 1:n sets and NAT 1:1 maps)
+
+flush ruleset
+
+include "/opt/gw/nft/defs/*"
+
+table inet gateway {
+
+    include "/opt/gw/nft/sets-maps/*"
+
+    chain prerouting {
+        type nat hook prerouting priority dstnat + 10;
+        policy accept;
+
+        # Anti-spoofing
+        meta iifname $WAN ip saddr { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 } counter drop
+
+        # NAT 1:1 DNAT
+        meta iifname $WAN dnat to ip daddr map @nat_1to1_dnat
+    }
+
+    chain postrouting {
+        type nat hook postrouting priority srcnat + 10;
+        policy accept;
+
+        # SNAT 1:n hosts groups
+         meta oifname $WAN iifname $LAN ip saddr @snat_hosts_100_64_0_5 snat to 100.64.0.5
+         meta oifname $WAN iifname $LAN ip saddr @snat_hosts_100_64_0_6 snat to 100.64.0.6
+
+        # SNAT 1:n subnets groups
+         meta oifname $WAN iifname $LAN ip saddr @snat_net_100_64_0_5 snat to 100.0.64.5
+         meta oifname $WAN iifname $LAN ip saddr @snat_net_100_64_0_6 snat to 100.0.64.6
+
+        # NAT 1:1 SNAT
+        meta oifname $WAN iifname $LAN snat to ip saddr map @nat_1to1_snat
+    }
+
+    chain forward {
+        type filter hook forward priority 0;
+        policy drop;
+
+        ct state invalid counter drop
+        ct state established,related counter accept
+
+        # Log new TCP SYN packets (diagnostics)
+        ct state new oifname $LAN tcp flags & (fin | syn | rst | ack) == syn log prefix "[nftables] FWD New SYN: " group 1
+
+        meta iifname $LAN jump sanity_lan
+
+        # Allow Forwarding IP
+        meta iifname $LAN oifname $WAN ip saddr @allowed_forwarded counter accept
+        meta iifname $WAN oifname $LAN ip daddr @allowed_forwarded counter accept
+
+        limit rate 10/second log prefix "FORWARD DROP: " group 0
+    }
+
+    chain input {
+        type filter hook input priority 0;
+        policy drop;
+
+        ct state invalid counter drop
+        ct state established,related counter accept
+
+        ip protocol icmp counter accept
+        ip saddr 192.0.2.0/24 tcp dport 22 counter accept
+
+        limit rate 5/second log prefix "INPUT DROP: " group 0
+    }
+
+    chain output {
+        type filter hook output priority 0;
+        policy accept;
+    }
+
+    chain sanity_lan {
+        ip saddr != { 192.168.0.0/16, 10.0.0.0/8 } counter drop
+    }
+}

@@ -1,0 +1,6 @@
+# nat-1to1-dnat.nft - public → private mapping for DNAT
+# Add elements in the form: <public_ip> : <private_ip>
+
+map nat_1to1_dnat {
+    type ipv4_addr : ipv4_addr;
+}

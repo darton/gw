@@ -353,21 +353,23 @@ function dhcpd_reload {
 }
 
 function gw_cron {
+    local cronfile="/etc/cron.d/gw_sh"
+
     if [ "$1" = "start" ]; then
-        echo "# Run the gw.sh cron jobs
-SHELL=/bin/bash
-PATH=/sbin:/bin:/usr/sbin:/usr/bin
-MAILTO=""
-* * * * * root $scriptsdir/gw.sh reload_new_config  > /dev/null 2>&1
-00 22 * * * root $scriptsdir/gw.sh shaper_reload  > /dev/null 2>&1
-00 10 * * * root $scriptsdir/gw.sh shaper_reload  > /dev/null 2>&1
-" > /etc/cron.d/gw_sh
+        printf "%s\n" \
+            "# Run the gw.sh cron jobs" \
+            "SHELL=/bin/bash" \
+            "PATH=/sbin:/bin:/usr/sbin:/usr/bin" \
+            'MAILTO=""' \
+            "* * * * * root ${scriptsdir}/gw.sh reload_new_config  > /dev/null 2>&1" \
+            "00 22 * * * root ${scriptsdir}/gw.sh shaper_reload     > /dev/null 2>&1" \
+            "00 10 * * * root ${scriptsdir}/gw.sh shaper_reload     > /dev/null 2>&1" \
+            > "$cronfile"
+
         Log info "Enabling cron for gw.sh"
 
     elif [ "$1" = "stop" ]; then
-        if [ -f /etc/cron.d/gw_sh ]; then
-            rm /etc/cron.d/gw_sh
-        fi
+        [ -f "$cronfile" ] && rm "$cronfile"
         Log info "Disabling cron for gw.sh"
     fi
 }

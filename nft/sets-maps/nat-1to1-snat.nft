@@ -1,0 +1,6 @@
+# nat-1to1-snat.nft - private → public mapping for SNAT
+# Add elements in the form: <private_ip> : <public_ip>
+
+map nat_1to1_snat {
+    type ipv4_addr : ipv4_addr;
+}

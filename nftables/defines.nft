@@ -1,3 +1,0 @@
-define LAN = "enp3s0"
-define WAN = "enp4s0"
-define MGMT = "eno1"

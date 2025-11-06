@@ -1,0 +1,4 @@
+
+    set allowed_forwarded {
+        type ipv4_addr;
+    }

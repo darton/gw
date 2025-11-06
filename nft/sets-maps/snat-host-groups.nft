@@ -1,0 +1,10 @@
+# snat-host-groups.nft 
+
+set snat_hosts_100_64_0_5 {
+    type ipv4_addr;
+}
+
+set snat_hosts_100_64_0_6 {
+    type ipv4_addr;
+    elements = { 192.168.3.15, 192.168.3.16 }
+}
