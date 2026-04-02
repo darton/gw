@@ -15,7 +15,12 @@
 PATH=/sbin:/usr/sbin/:/bin:/usr/bin:$PATH
 
 SCRIPT_NAME="${BASH_SOURCE[0]##*/}"
-SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P) || { 
+    printf "ERROR Cannot determine the script directory\n"; exit 1
+}
+
+SCRIPT_PATH="${SCRIPT_DIR}/${SCRIPT_NAME}"
 
 GW_CONF_PATH="${SCRIPT_DIR}/gw.conf"
 GW_FUNCTIONS_PATH="$SCRIPT_DIR/gwfunctions.sh"
