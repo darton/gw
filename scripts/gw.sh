@@ -14,9 +14,7 @@
 
 PATH=/sbin:/usr/sbin/:/bin:/usr/bin:$PATH
 
-SCRIPT_SRC="${BASH_SOURCE[0]}"
-SCRIPT_NAME="${SCRIPT_SRC##*/}"
-
+SCRIPT_NAME="${BASH_SOURCE[0]##*/}"
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
 
 GW_CONF_PATH="${SCRIPT_DIR}/gw.conf"
